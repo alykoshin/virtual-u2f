@@ -28,10 +28,12 @@
 	],
 	"content_security_policy": "script-src 'self' 'unsafe-eval'; object-src 'self'",
 	"externally_connectable": {
-		"matches": [
+	  // "ids": ["*"],
+			"matches": [
             "*://localhost/*",
             "*://127.0.0.1/*",
-            "*://mplatt.github.io/*"
+            "*://mplatt.github.io/*",
+            "*://demo.yubico.com/*"
 		]
 	},
 	"background": {

@@ -8,7 +8,7 @@
 window.u2f = window.u2f || {};
 
 /**
- * Message types for messsages to/from the extension
+ * Message types for messages to/from the extension
  * @const
  * @type {{U2F_REGISTER_REQUEST: string, U2F_SIGN_REQUEST: string, U2F_REGISTER_RESPONSE: string, U2F_SIGN_RESPONSE: string}}
  */
@@ -46,8 +46,10 @@ u2f.ErrorCodes = {
  * @const
  */
 var ATTESTATION_KEY = {
-    "private": "d30c9cac7da2b4a7d71b002a40a3b59a96ca508ba9c7dc617d982c4b11d952e6",
-    "public": "04c3c91f252e20107b5e8deab1902098f7287071e45418b898ce5ff17ca725ae78c33cc701c0746011cbbbb58b08b61d20c05e75d501a3f8f7a1673fbe3263aebe"
+  "private": "d30c9cac7da2b4a7d71b002a40a3b59a96ca508ba9c7dc617d982c4b11d952e6",
+    //"private": "f3fccc0d00d8031954f90864d43c247f4bf5f0665c6b50cc17749a27d1cf7664",
+  "public": "048d617e65c9508e64bcc5673ac82a6799da3c1446682c258c463fffdf58dfd2fa3e6c378b53d795c4a4dffb4199edd7862f23abaf0203b4b8911ba0569994e101"
+    //"public": "04c3c91f252e20107b5e8deab1902098f7287071e45418b898ce5ff17ca725ae78c33cc701c0746011cbbbb58b08b61d20c05e75d501a3f8f7a1673fbe3263aebe"
 };
 
 /*
@@ -174,6 +176,10 @@ var ATTESTATION_KEY = {
  * @type {string}
  * @const
  */
+// from reference example
+//var ATTESTATION_CERTIFICATE = "3082013c3081e4a003020102020a47901280001155957352300a06082a8648ce3d0403023017311530130603550403130c476e756262792050696c6f74301e170d3132303831343138323933325a170d3133303831343138323933325a3031312f302d0603550403132650696c6f74476e756262792d302e342e312d34373930313238303030313135353935373335323059301306072a8648ce3d020106082a8648ce3d030107034200048d617e65c9508e64bcc5673ac82a6799da3c1446682c258c463fffdf58dfd2fa3e6c378b53d795c4a4dffb4199edd7862f23abaf0203b4b8911ba0569994e101300a06082a8648ce3d0403020347003044022060cdb6061e9c22262d1aac1d96d8c70829b2366531dda268832cb836bcd30dfa0220631b1459f09e6330055722c8d89b7f48883b9089b88d60d1d9795902b30410df";
+
+// from original extension
 var ATTESTATION_CERTIFICATE = "308201b430820158a003020102020101300c06082a8648ce3d04030205003061310b300906035504061302444531263024060355040a0c1d556e7472757374776f72746879204341204f7267616e69736174696f6e310f300d06035504080c064265726c696e3119301706035504030c10556e7472757374776f727468792043413022180f32303134303932343132303030305a180f32313134303932343132303030305a305e310b30090603550406130244453121301f060355040a0c187669727475616c2d7532662d6d616e756661637475726572310f300d06035504080c064265726c696e311b301906035504030c127669727475616c2d7532662d76302e302e313059301306072a8648ce3d020106082a8648ce3d03010703420004c3c91f252e20107b5e8deab1902098f7287071e45418b898ce5ff17ca725ae78c33cc701c0746011cbbbb58b08b61d20c05e75d501a3f8f7a1673fbe3263aebe300c06082a8648ce3d040302050003480030450221008eb92057a1f3414f1b791a58e607aba4661c9361fbc4ba89655c8a3bec1068da02201590a876f08047df608e23b22aa0aad24b0d49c9753300af32b69073f0a1a4db";
 
 /**
@@ -222,11 +228,22 @@ var _currentRequest = {};
 var userPresenceTest = new Event("userPresence");
 
 window.addEventListener("userPresence", function(){
+    console.log('token.js: window.addEventListener(): userPresence');
+
     handleCurrentRequest();
 }, false);
 
+console.log('token.js')
+chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
+  "use strict";
+  console.log('token.js: chrome.runtime.onMessage.addListener(): request:', request, ' sender:', sender, ' sendResponse:', typeof(sendResponse));
+  return true;
+});
+
 chrome.runtime.onMessageExternal.addListener(function (request, sender, sendResponse) {
     "use strict";
+    console.log('token.js: chrome.runtime.onMessageExternal.addListener(): request:', request, ' sender:', sender, ' sendResponse:', typeof(sendResponse));
+
     request["started"] = new Date().getTime();
     storeRequest(request, sender, sendResponse);
 
@@ -245,37 +262,62 @@ chrome.runtime.onMessageExternal.addListener(function (request, sender, sendResp
  */
 var handleRegisterRequest = function (request, sender, sendResponse) {
     "use strict";
+    console.log('token.js: handleRegisterRequest(): request:', request, ' sender:', sender, ' sendResponse:', typeof(sendResponse));
 
     /*
      * The new keypair for this RP
      */
     var keyPair = generateKeyPair();
+    var userPublicKey = keyPair.ecpubhex;
+
     var clientData = getClientDataStringFromRequest(request);
     var clientDataHash = sha256Digest(clientData);
+  console.log('token.js: handleRegisterRequest(): clientData:', clientData);
+  console.log('token.js: handleRegisterRequest(): clientDataHash:', clientDataHash);
+
+
     var applicationId = getApplicationIdFromRequest(request);
     var applicationIdHash = sha256Digest(applicationId);
-    var keyHandle = generateKeyHandle();
-    var keyHandleLength = getKeyHandleLengthString(keyHandle);
-    var signature = signHex(ATTESTATION_KEY.private, getRegistrationSignatureBaseString(applicationIdHash, clientDataHash, keyHandle, keyPair.ecpubhex));
+  console.log('token.js: handleRegisterRequest(): applicationId:', applicationId);
+  console.log('token.js: handleRegisterRequest(): applicationIdHash:', applicationIdHash);
 
-    var response = RESERVED_BYTE + keyPair.ecpubhex + keyHandleLength + keyHandle + ATTESTATION_CERTIFICATE + signature;
+  var keyHandle = generateKeyHandle();
+    var keyHandleLength = getKeyHandleLengthString(keyHandle);
+  console.log('token.js: handleRegisterRequest(): keyHandle:', keyHandle);
+  console.log('token.js: handleRegisterRequest(): keyHandleLength:', keyHandleLength);
+
+  var signature = signHex(
+      ATTESTATION_KEY.private,
+      getRegistrationSignatureBaseString(
+        // !!!
+        applicationIdHash, clientDataHash, keyHandle, keyPair.ecpubhex
+        //applicationIdHash, clientDataHash, keyHandle, userPublicKey
+      )
+    );
+  console.log('token.js: handleRegisterRequest(): signature:', signature);
+
+  var response = RESERVED_BYTE + userPublicKey + keyHandleLength + keyHandle + ATTESTATION_CERTIFICATE + signature;
 
     var sessionID = getSessionIdFromRequest(request);
+  console.log('token.js: handleRegisterRequest(): sessionID:', sessionID);
 
-    safeToKeyStore(applicationId, keyHandle, keyPair);
+  safeToKeyStore(applicationId, keyHandle, keyPair);
 
+    
     /*
      * fido-u2f-javascript-api-v1.0-rd-20140209.pdf ll. 175-182
      */
     sendResponse({
         // websafe-base64(raw registration response message)
-        registrationData: hextob64(response),
+        registrationData: hextob64u(response),
 
         // websafe-base64(UTF8(stringified(client data)))
-        bd: clientData,
+        //bd: clientData,
+      // !!!
+      clientData: btoa(clientData),
 
         // session id originally passed to handleRegistrationRequest
-        sessionId :sessionID
+        sessionId: sessionID
     });
     return;
 };
@@ -288,6 +330,9 @@ var handleRegisterRequest = function (request, sender, sendResponse) {
  */
 var handleSignRequest = function (request, sender, sendResponse) {
     "use strict";
+    console.log('token.js: handleSignRequest(): request:', request, ' sender:', sender, ' sendResponse:', typeof(sendResponse));
+
+
     if (!isValidKeyHandleForAppId(b64tohex(getKeyHandleFromRequest(request)), getApplicationIdFromRequest(request))) {
         sendResponse({
             errorCode: u2f.ErrorCodes.DEVICE_INELIGIBLE,
@@ -305,17 +350,21 @@ var handleSignRequest = function (request, sender, sendResponse) {
 
         var signature = signHex(getKeyByHandle(b64tohex(getKeyHandleFromRequest(request))).private, getSignSignatureBaseString(applicationIdHash, counterHex, clientDataHash));
         
-        var sign = hextob64(USER_PRESENCE_BYTE + counterHex + signature);
-        
+        //var sign = hextob64(USER_PRESENCE_BYTE + counterHex + signature);
+        var sign = hextob64u(USER_PRESENCE_BYTE + counterHex + signature);
+
+        console.log('clientData:', JSON.stringify(clientData));
         /*
          * fido-u2f-javascript-api-v1.0-rd-20140209.pdf ll.254 - 265
          */
         sendResponse({
             // websafe-base64(client data)
-            bd : clientData,
+            //bd : clientData,
+          clientData : btoa(clientData),
 
             // websafe-base64(raw response from U2F device)
-            sign : sign,
+            //sign : sign,
+          signatureData : sign,
 
             // challenge originally passed to handleSignRequest
             challenge : challenge,
@@ -354,6 +403,8 @@ var counterPadding = function (num) {
  */
 var isValidKeyHandleForAppId = function (keyHandle, appId) {
     "use strict";
+    console.log('token.js: isValidKeyHandleForAppId(): keyHandle:', keyHandle, ' appId:', appId);
+
     var key = getKeyByHandle(keyHandle);
 
     if (key === null) {
@@ -374,6 +425,8 @@ var isValidKeyHandleForAppId = function (keyHandle, appId) {
  */
 var resetCounter = function (keyHandle, appId) {
     "use strict";
+    console.log('token.js: resetCounter(): keyHandle:', keyHandle, ' appId:', appId);
+
     var keyStore = getKeyStore();
 
     for (var k in keyStore) {
@@ -393,6 +446,8 @@ var resetCounter = function (keyHandle, appId) {
  */
 var increaseCounter = function (keyHandle, appId) {
     "use strict";
+    console.log('token.js: resetCounter(): keyHandle:', keyHandle, ' appId:', appId);
+
     var keyStore = getKeyStore();
 
     for (var k in keyStore) {
@@ -412,6 +467,9 @@ var increaseCounter = function (keyHandle, appId) {
  */
 var getKeyByHandle = function (keyHandle) {
     "use strict";
+    console.log('token.js: resetCounter(): keyHandle:', keyHandle);
+
+
     var keyStore = getKeyStore();
     for (var k in keyStore) {
         var key = keyStore[k];
@@ -432,6 +490,9 @@ var getKeyByHandle = function (keyHandle) {
  */
 var storeRequest = function (request, sender, sendResponse) {
     "use strict";
+    console.log('token.js: storeRequest(): request:', request, ' sender:', sender, ' sendResponse:', typeof(sendResponse));
+
+
     /**
      * @type {request: *, sender: *, sendResponse: *}}
      * @private
@@ -446,6 +507,7 @@ var storeRequest = function (request, sender, sendResponse) {
 
 var handleCurrentRequest = function () {
     "use strict";
+    console.log('token.js: handleCurrentRequest()');
     /*
      * Check if the current request object is properly set
      */
@@ -478,6 +540,8 @@ var handleCurrentRequest = function () {
  */
 var generateKeyPair = function () {
     "use strict";
+
+    console.log('token.js: generateKeyPair()');
     /**
      *
      * @type {KJUR.crypto.ECDSA}
@@ -496,6 +560,7 @@ var generateKeyPair = function () {
  */
 var signHex = function (privateKey, message) {
     "use strict";
+    console.log('token.js: signHex(): privateKey:', privateKey, ' message:', message);
     /**
      * The signature object to sign a message with a given private key.
      * @type {KJUR.crypto.Signature}
@@ -773,3 +838,27 @@ var safeToKeyStore = function(applicationId, keyHandle, keyPair) {
     });
     return;
 };
+
+console.log('token.js: loaded');
+
+/*
+b64utohex('BQTLY5dpAjB6yHrC/qohu/V/aTYypSWxn2Pm029XHXpe0gR4+xtd9DtePtNUWMDjc8cnc6hXuY1sKVabeIGdSERoE2JvZ3VzXzE1MTExMjc3MzYzMjkwggE8MIHkoAMCAQICCkeQEoAAEVWVc1IwCgYIKoZIzj0EAwIwFzEVMBMGA1UEAxMMR251YmJ5IFBpbG90MB4XDTEyMDgxNDE4MjkzMloXDTEzMDgxNDE4MjkzMlowMTEvMC0GA1UEAxMmUGlsb3RHbnViYnktMC40LjEtNDc5MDEyODAwMDExNTU5NTczNTIwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASNYX5lyVCOZLzFZzrIKmeZ2jwURmgsJYxGP//fWN/S+j5sN4tT15XEpN/7QZnt14YvI6uvAgO0uJEboFaZlOEBMAoGCCqGSM49BAMCA0cAMEQCIGDNtgYenCImLRqsHZbYxwgpsjZlMd2iaIMsuDa80w36AiBjGxRZ8J5jMAVXIsjYm39IiDuQibiNYNHZeVkCswQQ3zBGAiEAxd0exL89O52LCCNt1idbjVLBe7VQ1YioM9EQokOldIwCIQD6wBQH1x4BFMEkjh8QgCDT8Xufu4DM3GJC8xapcnglHw==');
+
+
+05
+
+ 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3 3 3 3 3 3 3 3 3 4 4 4 4 4 4 4 4 4 4 5 5 5 5 5 5 5 5 5 5 6 6 6 6 6 6 6 6 6 6 7
+ 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0
+04cb63976902307ac87ac2feaa21bbf57f693632a525b19f63e6d36f571d7a5ed20478fb1b5df43b5e3ed35458c0e373c72773a857b98d6c29569b78819d484468
+
+13 = 19
+
+ 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3 3 3 3 3 3 3 3 3 4 4 4 4 4 4 4 4 4 4 5 5 5 5 5 5 5 5 5 5 6 6 6 6 6 6 6 6 6 6 7
+ 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0
+626f6775735f31353131313237373336333239
+
+3082013c3081e4a003020102020a47901280001155957352300a06082a8648ce3d0403023017311530130603550403130c476e756262792050696c6f74301e170d3132303831343138323933325a170d3133303831343138323933325a3031312f302d0603550403132650696c6f74476e756262792d302e342e312d34373930313238303030313135353935373335323059301306072a8648ce3d020106082a8648ce3d030107034200048d617e65c9508e64bcc5673ac82a6799da3c1446682c258c463fffdf58dfd2fa3e6c378b53d795c4a4dffb4199edd7862f23abaf0203b4b8911ba0569994e101300a06082a8648ce3d0403020347003044022060cdb6061e9c22262d1aac1d96d8c70829b2366531dda268832cb836bcd30dfa0220631b1459f09e6330055722c8d89b7f48883b9089b88d60d1d9795902b30410df
+
+3046022100c5dd1ec4bf3d3b9d8b08236dd6275b8d52c17bb550d588a833d110a243a5748c022100fac01407d71e0114c1248e1f108020d3f17b9fbb80ccdc6242f316a97278251f"
+
+*/

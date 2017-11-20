@@ -103,8 +103,11 @@
      * @param {function((u2f.Error|u2f.SignResponse))} callback
      * @param {number=} opt_timeoutSeconds
      */
-    u2f.sign = function(signRequests, callback, opt_timeoutSeconds) {
-        if (typeof signRequests === 'undefined' || typeof callback === 'undefined') {
+    //u2f.sign = function(signRequests, callback, opt_timeoutSeconds) {
+    u2f.sign = function(appId, challenge, signRequests, callback, opt_timeoutSeconds) {
+      console.log('api.js: u2f.sign(): appId:', appId, ' challenge:', challenge, ' signRequests:', signRequests, ' callback:', (typeof callback), ' opt_timeoutSeconds:', opt_timeoutSeconds);
+
+      if (typeof signRequests === 'undefined' || typeof callback === 'undefined') {
             throw new Error("Not all mandatory parameters provided");
         }
 
@@ -125,7 +128,14 @@
          */
         var millis = (typeof opt_timeoutSeconds !== 'undefined' ? (opt_timeoutSeconds * 1000) : (u2f.EXTENSION_TIMEOUT_SEC *1000));
 
-        /**
+      // !!!
+      signRequests.map(function(req) {
+        req.app_id = appId;
+        req.challenge = challenge;
+        return req;
+      });
+
+      /**
          * @type {{type: (u2f.MessageTypes.U2F_REGISTER_REQUEST|u2f.MessageTypes.U2F_SIGN_REQUEST), signRequests: Array.<u2f.SignRequest>, registerRequests: Array.<u2f.RegisterRequest>, timeoutSeconds: number}}
          */
         var req = {
@@ -134,7 +144,7 @@
             timeout : millis
         };
 
-        var timeout = setTimeout(function () {
+      var timeout = setTimeout(function () {
             if (!answered) {
                 answered = true;
                 callback({
@@ -144,8 +154,10 @@
             }
         }, millis);
 
-        chrome.runtime.sendMessage(EXTENSION_ID, req, function (response) {
-            if (!answered) {
+      console.log('api.js: u2f.sign(): chrome.runtime.sendMessage(): : callback, req:', req);
+      chrome.runtime.sendMessage(EXTENSION_ID, req, function (response) {
+          console.log('api.js: u2f.sign(): chrome.runtime.sendMessage(): : callback, answered:', answered, ' response:', response);
+          if (!answered) {
                 answered = true;
                 callback(response);
             }
@@ -159,8 +171,11 @@
      * @param {function((u2f.Error|u2f.RegisterResponse))} callback
      * @param {number=} opt_timeoutSeconds
      */
-    u2f.register = function (registerRequests, signRequests, callback, opt_timeoutSeconds) {
-        if (typeof registerRequests === 'undefined' || typeof signRequests === 'undefined' || typeof callback === 'undefined') {
+    //u2f.register = function (registerRequests, signRequests, callback, opt_timeoutSeconds) {
+    u2f.register = function (appId, registerRequests, signRequests, callback, opt_timeoutSeconds) {
+      console.log('api.js: u2f.register(): appId:', appId, ' registerRequests:', JSON.stringify(registerRequests), ' signRequests:', signRequests, ' callback:', (typeof callback), ' opt_timeoutSeconds:', opt_timeoutSeconds);
+
+      if (typeof registerRequests === 'undefined' || typeof signRequests === 'undefined' || typeof callback === 'undefined') {
             throw new Error("Not all mandatory parameters provided");
         }
 
@@ -184,7 +199,13 @@
         /**
          * @type {{type: (u2f.MessageTypes.U2F_REGISTER_REQUEST|u2f.MessageTypes.U2F_SIGN_REQUEST), signRequests: Array.<u2f.SignRequest>, registerRequests: Array.<u2f.RegisterRequest>, timeoutSeconds: number}}
          */
-        var req = {
+        // !!!
+        registerRequests.map(function(req) {
+          req.app_id = appId;
+          return req;
+        });
+
+      var req = {
             type: u2f.MessageTypes.U2F_REGISTER_REQUEST,
             registerRequests: transformRequestChallenge(registerRequests, u2f.MessageTypes.U2F_REGISTER_REQUEST),
             timeout : millis
@@ -193,14 +214,21 @@
         var timeout = setTimeout(function () {
             if (!answered) {
                 answered = true;
-                callback({
+
+              console.log('api.js: u2f.register(): timeout');
+              callback({
                     errorCode: u2f.ErrorCodes.TIMEOUT,
                     errorMessage: "Request timed out"
                 });
             }
         }, millis);
 
+        console.log('api.js: u2f.register(): chrome.runtime.sendMessage, req:', req);
         chrome.runtime.sendMessage(EXTENSION_ID, req, function (response) {
+            console.log('api.js: u2f.register(): chrome.runtime.sendMessage(): callback: response:', response);
+            console.log('api.js: u2f.register(): chrome.runtime.sendMessage(): callback: response:', JSON.stringify(response));
+
+
             if (!answered) {
                 answered = true;
                 callback(response);
@@ -237,6 +265,7 @@
      * @param {u2f.MessageTypes.U2F_REGISTER_REQUEST|u2f.MessageTypes.U2F_SIGN_REQUEST} type The request type
      */
     function transformRequestChallenge (requests, type) {
+      console.log('api.js: transformRequestChallenge(): requests:', JSON.stringify(requests), ' type:', type )
         for (var i = 0; i < requests.length; i++) {
             var request = requests[i];
             var originalChallenge = request.challenge;

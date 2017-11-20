@@ -1,6 +1,7 @@
 var bkg = chrome.extension.getBackgroundPage();
 
 $(document).ready(function() {
+    console.log('ui.js: $(document).ready')
     var DELETEABLE_CLASS_NAME = "deleteable";
 
     /*
@@ -87,6 +88,7 @@ $(document).ready(function() {
 
 
 	(function updateUI(){
+    console.log('ui.js: updateUI()')
 		updateKeyList(bkg.getKeyStore());
 		timer = window.setTimeout(updateUI, 1200);
 	})();
