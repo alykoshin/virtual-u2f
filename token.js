@@ -310,6 +310,8 @@ var handleRegisterRequest = function (request, sender, sendResponse) {
     sendResponse({
         // websafe-base64(raw registration response message)
         registrationData: hextob64u(response),
+        version: "U2F_V2",
+        publicKey: userPublicKey,
 
         // websafe-base64(UTF8(stringified(client data)))
         //bd: clientData,
@@ -332,8 +334,8 @@ var handleSignRequest = function (request, sender, sendResponse) {
     "use strict";
     console.log('token.js: handleSignRequest(): request:', request, ' sender:', sender, ' sendResponse:', typeof(sendResponse));
 
-
-    if (!isValidKeyHandleForAppId(b64tohex(getKeyHandleFromRequest(request)), getApplicationIdFromRequest(request))) {
+    var keyHandle = getKeyHandleFromRequest(request);
+    if (!isValidKeyHandleForAppId(b64tohex(keyHandle), getApplicationIdFromRequest(request))) {
         sendResponse({
             errorCode: u2f.ErrorCodes.DEVICE_INELIGIBLE,
             errorMessage: "Not a valid device for this key handle/app id combination"
@@ -348,7 +350,7 @@ var handleSignRequest = function (request, sender, sendResponse) {
         var counter = getKeyByHandle(b64tohex(getKeyHandleFromRequest(request))).counter;
         var counterHex = counterPadding(counter);
 
-        var signature = signHex(getKeyByHandle(b64tohex(getKeyHandleFromRequest(request))).private, getSignSignatureBaseString(applicationIdHash, counterHex, clientDataHash));
+        var signature = signHex(getKeyByHandle(b64tohex(keyHandle)).private, getSignSignatureBaseString(applicationIdHash, counterHex, clientDataHash));
         
         //var sign = hextob64(USER_PRESENCE_BYTE + counterHex + signature);
         var sign = hextob64u(USER_PRESENCE_BYTE + counterHex + signature);
@@ -373,7 +375,8 @@ var handleSignRequest = function (request, sender, sendResponse) {
             sessionId : sessionID,
 
             // application id originally passed to handleSignRequest
-            app_id : applicationId
+            app_id: applicationId,
+            keyHandle: keyHandle
         });
 
         if (counter >= 65535) {
